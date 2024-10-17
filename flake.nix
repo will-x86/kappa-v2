@@ -23,6 +23,7 @@
             gopls
             gotools
             go-outline
+            sqlc
             air
             gopkgs
             godef
