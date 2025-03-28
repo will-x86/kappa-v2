@@ -1,7 +1,3 @@
-# Rust dev env Template
+# Kappa-v2
 
-A basic Rust dev env with common tools including:
-- openssl
-- pkg-config
-- eza
-- fd
+Kappa v1 using containerd rather than docker ( lmfao )
