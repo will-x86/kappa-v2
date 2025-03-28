@@ -2,3 +2,4 @@
 .direnv
 .env
 kappa-v3
+.envrc
