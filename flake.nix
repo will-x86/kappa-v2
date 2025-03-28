@@ -1,50 +1,39 @@
 {
-  description = "Basic rust flake :)";
+  description = "Basic go flake";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    rust-overlay.url = "github:oxalica/rust-overlay";
-    flake-utils.url = "github:numtide/flake-utils";
+    nixpkgs.url = "github:nixos/nixpkgs?ref=nixos-unstable";
   };
 
   outputs = {
     self,
     nixpkgs,
-    rust-overlay,
     flake-utils,
-    ...
   }:
     flake-utils.lib.eachDefaultSystem (
       system: let
-        overlays = [(import rust-overlay)];
         pkgs = import nixpkgs {
-          inherit system overlays;
+          inherit system;
+          overlays = [];
         };
-      in
-        with pkgs; {
-          devShells.default = mkShell {
-            LD_LIBRARY_PATH = lib.makeLibraryPath [openssl];
-            buildInputs = [
-              openssl
-              pkg-config
-              eza
-              fd
-              rust-bin.stable.latest.default
-              rustfmt
-              rust-analyzer
-              protobuf_27
-              # cargo-watch
-              # pkgs.sqlite
-              # pkgs.bunyan-rs
-              pkgs.zsh
-            ];
+      in {
+        devShell = pkgs.mkShell {
+          buildInputs = with pkgs; [
+            go
+            gopls
+            gotools
+            go-outline
+            gopkgs
+            godef
+            golint
+          ];
 
-            shellHook = ''
-              alias ls=eza
-              export PATH=$PATH:${pkgs.rust-analyzer}/bin
-              alias find=fd
-            '';
-          };
-        }
+          shellHook = ''
+            echo "Golang development environment loaded"
+            export GOPATH=$HOME/go
+            export PATH=$GOPATH/bin:$PATH
+          '';
+        };
+      }
     );
 }
