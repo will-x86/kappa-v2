@@ -4,3 +4,14 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+anyhow = "1.0.97"
+containerd-client = "0.8.0"
+dotenv = "0.15.0"
+oci-spec = "0.7.1"
+prost-types = "0.13.5"
+serde_json = "1.0.140"
+tokio = { version = "1.26", features = ["full"]}
+tonic = "0.12.0"
+tracing = "0.1.41"
+tracing-subscriber = {version="0.3.19", features=["env-filter"]}
+
