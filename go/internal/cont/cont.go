@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"runtime"
 	"slices"
 	"sync"
 	"syscall"
@@ -17,6 +19,7 @@ import (
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/oci"
 	"github.com/go-playground/validator/v10"
+	"github.com/opencontainers/runtime-spec/specs-go"
 	"go.uber.org/zap"
 )
 
@@ -28,14 +31,15 @@ type StopOptions struct {
 
 // sh -c must be done by user
 type ContainerConfig struct {
-	Image         string `validate:"required"`
-	Name          string
+	Image         string   `validate:"required"`
+	Name          string   `validate:"required"`
 	Namespace     string   `validate:"required"`
 	Command       []string `validate:"required"`
 	Env           []string `validate:"required"`
-	WorkingDir    string
+	Mounts        []specs.Mount
 	RemoveOptions RemoveOptions
 }
+
 type RemoveOptions struct {
 	RemoveSnapshotIfExists  bool
 	RemoveContainerIfExists bool
@@ -53,6 +57,7 @@ type (
 
 type Container struct {
 	id         string
+	mounts     []specs.Mount
 	client     *containerd.Client
 	container  containerd.Container
 	task       containerd.Task
@@ -62,12 +67,50 @@ type Container struct {
 	logMu      sync.Mutex
 	callbacks  []LogCallback
 	callbackMu sync.Mutex
+	tempDirs   []string
+	cleanupMu  sync.Mutex
+}
+
+func (c *Container) RegisterTmpDir(path string) {
+	c.cleanupMu.Lock()
+	defer c.cleanupMu.Unlock()
+	c.tempDirs = append(c.tempDirs, path)
+}
+
+func (c *Container) cleanup() error {
+	c.cleanupMu.Lock()
+	defer c.cleanupMu.Unlock()
+
+	logger := zap.L()
+	var errs []error
+
+	// Clean up temporary directories
+	for _, dir := range c.tempDirs {
+		logger.Info("Removing temporary directory", zap.String("path", dir))
+		if err := os.RemoveAll(dir); err != nil {
+			logger.Error("Failed to remove temporary directory",
+				zap.String("path", dir),
+				zap.Error(err))
+			errs = append(errs, fmt.Errorf("failed to remove temp dir %s: %w", dir, err))
+		}
+	}
+	c.tempDirs = nil
+
+	return errors.Join(errs...)
 }
 
 func (c *Container) addCallback(callback LogCallback) {
 	c.callbackMu.Lock()
 	defer c.callbackMu.Unlock()
 	c.callbacks = append(c.callbacks, callback)
+}
+
+func (c *Container) Task() containerd.Task {
+	return c.task
+}
+
+func (c *Container) Ctx() context.Context {
+	return c.ctx
 }
 
 func NewContainer(config ContainerConfig) (*Container, error) {
@@ -100,12 +143,16 @@ func NewContainer(config ContainerConfig) (*Container, error) {
 	ctx := namespaces.WithNamespace(context.Background(), config.Namespace)
 	logger.Info("Container instance created successfully")
 
-	return &Container{
-		id:     config.Name,
-		client: client,
-		config: config,
-		ctx:    ctx,
-	}, nil
+	container := &Container{
+		id:       config.Name,
+		client:   client,
+		config:   config,
+		ctx:      ctx,
+		mounts:   config.Mounts,
+		tempDirs: make([]string, 0),
+	}
+	container.SetupFinalizer()
+	return container, nil
 }
 
 func (c *Container) Start() error {
@@ -147,7 +194,7 @@ func (c *Container) Start() error {
 					select {
 					case <-statusC:
 						logger.Info("Task exited")
-					case <-time.After(5 * time.Second):
+					case <-time.After(1000 * time.Second):
 						logger.Warn("Task wait timed out")
 					}
 				}
@@ -187,6 +234,9 @@ func (c *Container) Start() error {
 	}
 	logger.Info("Image pulled successfully")
 
+	for k, v := range c.mounts {
+		logger.Info("Mount:", zap.Int("id", k), zap.Any("mount", v))
+	}
 	logger.Info("Creating new container instance")
 	container, err := c.client.NewContainer(
 		c.ctx,
@@ -197,6 +247,11 @@ func (c *Container) Start() error {
 			oci.WithImageConfig(image),
 			oci.WithEnv(c.config.Env),
 			oci.WithProcessArgs(c.config.Command...),
+			oci.WithMounts(c.mounts),
+			oci.WithProcessCwd("/app"),
+			oci.WithHostHostsFile,
+			oci.WithHostResolvconf,
+			oci.WithHostNamespace(specs.NetworkNamespace),
 		),
 	)
 	if err != nil {
@@ -230,6 +285,14 @@ func (c *Container) Start() error {
 		zap.String("id", c.id),
 		zap.String("state", "running"))
 	return nil
+}
+
+func (c *Container) SetupFinalizer() {
+	runtime.SetFinalizer(c, func(c *Container) {
+		if err := c.cleanup(); err != nil {
+			zap.L().Error("Failed to cleanup in finalizer", zap.Error(err))
+		}
+	})
 }
 
 func (c *Container) Stop(opts StopOptions) error {
@@ -308,11 +371,13 @@ func (c *Container) Remove() error {
 	logger := zap.L()
 	logger.Info("Removing container", zap.String("id", c.id))
 
+	var errs []error
+
 	if c.task != nil {
 		logger.Info("Deleting task")
 		if _, err := c.task.Delete(c.ctx); err != nil {
 			logger.Error("Failed to delete task", zap.Error(err))
-			return fmt.Errorf("failed to delete task: %w", err)
+			errs = append(errs, fmt.Errorf("failed to delete task: %w", err))
 		}
 	}
 
@@ -320,8 +385,17 @@ func (c *Container) Remove() error {
 		logger.Info("Deleting container")
 		if err := c.container.Delete(c.ctx, containerd.WithSnapshotCleanup); err != nil {
 			logger.Error("Failed to delete container", zap.Error(err))
-			return fmt.Errorf("failed to delete container: %w", err)
+			errs = append(errs, fmt.Errorf("failed to delete container: %w", err))
 		}
+	}
+
+	// Perform cleanup of temporary directories
+	if err := c.cleanup(); err != nil {
+		errs = append(errs, err)
+	}
+
+	if len(errs) > 0 {
+		return errors.Join(errs...)
 	}
 
 	logger.Info("Container removed successfully")
@@ -358,12 +432,28 @@ func (c *Container) GetLogs() []string {
 }
 
 func (c *Container) Close() error {
+	logger := zap.L()
+	var errs []error
+
 	c.logMu.Lock()
 	c.logs = nil
-	defer c.logMu.Unlock()
-	if c.client != nil {
-		return c.client.Close()
+	c.logMu.Unlock()
+
+	if err := c.cleanup(); err != nil {
+		errs = append(errs, err)
 	}
+
+	if c.client != nil {
+		if err := c.client.Close(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	if len(errs) > 0 {
+		return errors.Join(errs...)
+	}
+
+	logger.Info("Container closed successfully")
 	return nil
 }
 

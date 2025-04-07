@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"go.uber.org/zap"
-
 	"kappa-v3/internal/cont"
+	"kappa-v3/internal/runtime"
 )
 
 // Boring logging stuff
@@ -16,7 +16,6 @@ func init() {
 	if os.Getenv("APP_ENV") == "development" {
 		logger = zap.Must(zap.NewDevelopment())
 	}
-
 	zap.ReplaceGlobals(logger)
 }
 
@@ -24,21 +23,49 @@ func main() {
 	logger := zap.L()
 	logger.Info("Starting application")
 
-	// Defaults to "default" namespace
-	config := cont.ContainerConfig{
-		Image:     "docker.io/library/alpine:latest",
-		Name:      "my-container",
-		Namespace: "example",
-		Command:   []string{"sh", "-c", "ls"},
-		Env:       []string{"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"},
-		RemoveOptions: cont.RemoveOptions{
-			RemoveSnapshotIfExists:  true,
-			RemoveContainerIfExists: true,
-		},
+	c := make(map[string]string)
+	c["package.json"] = `{
+    "name": "example-app",
+    "version": "1.0.0",
+    "dependencies": {
+        "express": "^4.18.2",
+        "axios": "^1.6.2"
+    }
+}`
+
+	c["index.js"] = `
+    const express = require('express');
+    const axios = require('axios');
+    const helper = require('./lib/helper');
+    
+    console.log('Starting main application...');
+    console.log(helper.getMessage());
+    
+    // Show that we can access our dependencies
+    console.log('Express version:', express.version);
+    console.log('Axios version:', axios.version);
+    
+    // Some async operation
+    setTimeout(() => {
+        console.log('Async operation completed');
+    }, 2000);
+`
+
+	c["lib/helper.js"] = `
+    module.exports = {
+        getMessage: () => {
+            return 'Hello from the helper module!';
+        }
+    };
+`
+
+	r := runtime.Runtime{
+		Language: "nodejs",
+		Version:  "latest",
+		Code:     c,
 	}
 
-	logger.Info("Creating container", zap.String("name", config.Name))
-	container, err := cont.NewContainer(config)
+	container, err := r.NewContainer()
 	if err != nil {
 		logger.Fatal("Failed to create container", zap.Error(err))
 	}
@@ -54,14 +81,17 @@ func main() {
 		Stdout: true,
 		Stderr: true,
 		Callback: func(line string) {
-			logger.Info("Inside container logs, ", zap.String("line", line))
+			logger.Info("Container log", zap.String("line", line))
 		},
 	})
+
 	logger.Info("Waiting for 5 seconds")
 	time.Sleep(5 * time.Second)
+
 	if err != nil {
 		logger.Fatal("Fatal err with streaming logs", zap.Error(err))
 	}
+
 	stopOpts := cont.StopOptions{
 		Timeout:      5 * time.Second,
 		ForceKill:    true,
@@ -72,7 +102,7 @@ func main() {
 	if err := container.Stop(stopOpts); err != nil {
 		logger.Fatal("Failed to stop container", zap.Error(err))
 	}
-	log.Println("logs", container.GetLogs())
 
+	log.Println("logs", container.GetLogs())
 	logger.Info("Application completed successfully")
 }
