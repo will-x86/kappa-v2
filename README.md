@@ -12,4 +12,6 @@ Each technology/language is coupled with 1 unknown and 1 known
 
 ## Todo:
 
-- NodeJs support
+- Start gRPC on rust & Go side
+- make node_modules cache specific to _functions_ rather than all
+- Add GoLang support
