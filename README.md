@@ -18,3 +18,7 @@ Method of transport:
 4. Go(handler)1 Go(handler)2 Go(handler)3
 
 ## Todo:
+
+- Move handler from http to gRPC because lol
+- Move service from http to gRPC
+- Impleemnt basic postgres DB in the rust code
