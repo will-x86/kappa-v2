@@ -83,7 +83,7 @@ func (c *Container) cleanup() error {
 
 	logger := zap.L()
 	var errs []error
-
+	zap.L().Debug("Temp dirs", zap.Any("dirs", c.tempDirs))
 	// Clean up temporary directories
 	for _, dir := range c.tempDirs {
 		logger.Info("Removing temporary directory", zap.String("path", dir))
@@ -225,17 +225,24 @@ func (c *Container) Start() error {
 			}
 		}
 	}
-
+	// If exists
+	image, err := c.client.GetImage(c.ctx, c.config.Image)
+	if err == nil {
+		logger.Debug("Image already exists, skipping pull")
+		// Skip
+		goto image_exists
+	}
 	logger.Info("Pulling image")
-	image, err := c.client.Pull(c.ctx, c.config.Image, containerd.WithPullUnpack)
+	image, err = c.client.Pull(c.ctx, c.config.Image, containerd.WithPullUnpack)
 	if err != nil {
 		logger.Error("Failed to pull image", zap.Error(err))
 		return fmt.Errorf("failed to pull image: %w", err)
 	}
 	logger.Info("Image pulled successfully")
+image_exists:
 
 	for k, v := range c.mounts {
-		logger.Info("Mount:", zap.Int("id", k), zap.Any("mount", v))
+		logger.Debug("Mount:", zap.Int("id", k), zap.Any("mount", v))
 	}
 	logger.Info("Creating new container instance")
 	container, err := c.client.NewContainer(
@@ -297,10 +304,7 @@ func (c *Container) SetupFinalizer() {
 
 func (c *Container) Stop(opts StopOptions) error {
 	logger := zap.L()
-	logger.Info("Stopping container",
-		zap.String("id", c.id),
-		zap.Duration("timeout", opts.Timeout),
-		zap.Bool("forceKill", opts.ForceKill))
+	logger.Info("Stopping container", zap.Any("StopOptions", opts))
 
 	if c.task == nil {
 		logger.Error("No running task found")
@@ -362,6 +366,7 @@ func (c *Container) Stop(opts StopOptions) error {
 	if opts.RemoveOnStop {
 		logger.Info("Removing container")
 		return c.Remove()
+	} else {
 	}
 
 	return nil
@@ -370,9 +375,7 @@ func (c *Container) Stop(opts StopOptions) error {
 func (c *Container) Remove() error {
 	logger := zap.L()
 	logger.Info("Removing container", zap.String("id", c.id))
-
 	var errs []error
-
 	if c.task != nil {
 		logger.Info("Deleting task")
 		if _, err := c.task.Delete(c.ctx); err != nil {
