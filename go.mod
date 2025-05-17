@@ -1,4 +1,4 @@
-module kappa-v3
+module kappa-v2
 
 go 1.24.1
 

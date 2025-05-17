@@ -1,5 +1,3 @@
-// Package kappa provides a framework for creating serverless functions
-// similar to AWS Lambda but for the Kappa platform.
 package handler
 
 import (

@@ -6,8 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"kappa-v3/pkg/logger"
-	"kappa-v3/service/internal/cont"
+	"kappa-v2/pkg/logger"
+	"kappa-v2/service/internal/cont"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -119,7 +119,7 @@ func (lf *KappaFunction) Start(ctx context.Context) error {
 		fmt.Sprintf("PORT=%d", lf.Port),
 		"LAMBDA_TASK_ROOT=/app",
 		fmt.Sprintf("LAMBDA_FUNCTION_NAME=%s", lf.Name),
-		"AWS_LAMBDA_RUNTIME_API=localhost:8080", // This will be used by AWS Kappa SDK
+		"KAPPA_RUNTIME_API=localhost:8080", // This will be used by Kappa SDK
 	}, lf.Env...)
 
 	// Create container
@@ -134,7 +134,7 @@ func (lf *KappaFunction) Start(ctx context.Context) error {
 				Type:        "bind",
 				Source:      tmpPath,
 				Destination: "/app",
-				Options:     []string{"rbind", "rw"},
+				Options:     []string{"rbind", "ro"}, // rw = read write, only ro for now
 			},
 		},
 		RemoveOptions: cont.RemoveOptions{

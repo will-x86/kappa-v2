@@ -1,4 +1,4 @@
-module kappa-v3/service
+module kappa-v2/service
 
 go 1.24.1
 

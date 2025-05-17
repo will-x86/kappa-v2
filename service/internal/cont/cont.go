@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"kappa-v3/pkg/logger"
+	"kappa-v2/pkg/logger"
 	"os"
 	"runtime"
 	"slices"
@@ -84,7 +84,7 @@ func (c *Container) cleanup() error {
 
 	l := logger.Get()
 	var errs []error
-	zap.L().Debug("Temp dirs", zap.Any("dirs", c.tempDirs))
+	l.Debug("Temp dirs", zap.Any("dirs", c.tempDirs))
 	// Clean up temporary directories
 	for _, dir := range c.tempDirs {
 		l.Info("Removing temporary directory", zap.String("path", dir))
@@ -252,6 +252,8 @@ image_exists:
 		containerd.WithImage(image),
 		containerd.WithNewSnapshot(c.id+"-snapshot", image),
 		containerd.WithNewSpec(
+			oci.WithMemoryLimit(2000000*8),
+			oci.WithCPUs("1"),
 			oci.WithImageConfig(image),
 			oci.WithEnv(c.config.Env),
 			oci.WithProcessArgs(c.config.Command...),

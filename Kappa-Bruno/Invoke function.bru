@@ -5,13 +5,17 @@ meta {
 }
 
 post {
-  url: {{service}}/functions/hello-world
+  url: {{service}}/functions/hello-world?params=s
   body: json
   auth: inherit
 }
 
+params:query {
+  params: s
+}
+
 body:json {
   {
-    "name": "hello-xxxx"
+    "name": "hello-asd"
   }
 }
