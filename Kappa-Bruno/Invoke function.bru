@@ -1,0 +1,17 @@
+meta {
+  name: Invoke function
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{service}}/functions/hello-world
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "name": "hello-xxxx"
+  }
+}

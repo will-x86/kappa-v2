@@ -1,0 +1,20 @@
+meta {
+  name: New Function
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{service}}/functions
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "name": "hello-world",
+    "binaryPath": "/home/will/projects/kappa-v3/bin/handler_example",
+    "image": "docker.io/library/alpine:latest",
+    "env": ["VAR1=value1", "VAR2=value2"]
+  }
+}

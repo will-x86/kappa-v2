@@ -1,0 +1,17 @@
+meta {
+  name: Get container logs
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{service}}/functions/hello-world/logs
+  body: none
+  auth: inherit
+}
+
+body:json {
+  {
+    "name": "hello-world"
+  }
+}

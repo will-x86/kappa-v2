@@ -1,7 +1,8 @@
 target
+logs/
 .direnv
 .env
-kappa-v3
+bin/
 .envrc
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
