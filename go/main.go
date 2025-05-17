@@ -1,13 +1,14 @@
 package main
 
 import (
+	"kappa-v3/internal/cont"
+	"kappa-v3/internal/runtime"
 	"log"
 	"os"
 	"time"
 
+	_ "github.com/joho/godotenv/autoload"
 	"go.uber.org/zap"
-	"kappa-v3/internal/cont"
-	"kappa-v3/internal/runtime"
 )
 
 // Boring logging stuff
