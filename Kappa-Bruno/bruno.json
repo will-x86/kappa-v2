@@ -1,0 +1,9 @@
+{
+  "version": "1",
+  "name": "Kappa-Bruno",
+  "type": "collection",
+  "ignore": [
+    "node_modules",
+    ".git"
+  ]
+}
