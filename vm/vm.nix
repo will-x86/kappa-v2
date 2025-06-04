@@ -1,34 +1,23 @@
-# Build this VM with nix build  ./#nixosConfigurations.vm.config.system.build.vm
-# Then run is with: ./result/bin/run-nixos-vm
-# To be able to connect with ssh enable port forwarding with:
-# QEMU_NET_OPTS="hostfwd=tcp::2222-:22" ./result/bin/run-nixos-vm
-# Then connect with ssh -p 2222 guest@localhost
 {
-  lib,
-  config,
+  #lib,
+  #config,
   pkgs,
   ...
 }:
 let
-  # Import your Go application package definition
-  # This makes 'my-go-app' available as a Nix package.
   myGoApp = import ./my-go-app { inherit pkgs; };
 in
 {
-  # Internationalisation options
   i18n.defaultLocale = "en_US.UTF-8";
-  console.keyMap = "fr";
 
-  # Options for the screen
   virtualisation.vmVariant = {
     virtualisation.qemu.options = [
-      "-nographic" # No GUI, use terminal
-      "-serial mon:stdio" # Connect serial to stdio
-      "-vga none" # No VGA device
+      "-nographic"
+      "-serial mon:stdio"
+      "-vga none"
     ];
   };
 
-  # A default user able to use sudo
   users.users.guest = {
     isNormalUser = true;
     home = "/home/guest";
@@ -40,13 +29,11 @@ in
 
   services.getty.autologinUser = "guest";
 
-  # services.spice-vdagentd.enable = true;
-
   services.sshd.enable = true;
   systemd.services.my-go-app = {
     description = "Go App woo";
     wantedBy = [ "multi-user.target" ];
-    after = [ "network.target" ]; # if it needs network
+    after = [ "network.target" ];
     serviceConfig = {
       ExecStart = "${myGoApp}/bin/my-golang-app";
       Restart = "always";
@@ -58,7 +45,6 @@ in
     hey
     neovim
     wget
-    #wrk
     myGoApp
   ];
 
