@@ -12,7 +12,10 @@ import (
 	"syscall"
 	"time"
 
+	realKappa "kappa-v2/service/internal/kappa" // For the concrete type if needed
+
 	"github.com/gorilla/mux"
+
 	_ "github.com/joho/godotenv/autoload"
 	"go.uber.org/zap"
 )
@@ -26,26 +29,26 @@ type KappaFunctionConfig struct {
 }
 
 type KappaService struct {
-	functions map[string]*kappa.KappaFunction
-	router    *mux.Router
-	server    *http.Server
+	functions   map[string]*kappa.KappaFunction
+	router      *mux.Router
+	server      *http.Server
+	newFunction func(name, binaryPath, image string, env []string, port int) kappa.Function
 }
 
 func NewKappaService() *KappaService {
 	router := mux.NewRouter()
-
 	service := &KappaService{
 		functions: make(map[string]*kappa.KappaFunction),
 		router:    router,
+		newFunction: func(name, binaryPath, image string, env []string, port int) kappa.Function {
+			return realKappa.NewKappaFunction(name, binaryPath, image, env, port) // Default real implementation
+		},
 	}
-
-	// Set up API routes
 	router.HandleFunc("/functions", service.listFunctions).Methods("GET")
 	router.HandleFunc("/functions", service.registerFunction).Methods("POST")
 	router.HandleFunc("/functions/{name}", service.invokeFunction).Methods("POST")
 	router.HandleFunc("/functions/{name}", service.deleteFunction).Methods("DELETE")
 	router.HandleFunc("/functions/{name}/logs", service.getFunctionLogs).Methods("GET")
-
 	return service
 }
 

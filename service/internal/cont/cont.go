@@ -314,10 +314,18 @@ func (c *Container) Stop(opts StopOptions) error {
 		return fmt.Errorf("no running task found")
 	}
 
+	/*
 	status, err := c.task.Status(c.ctx)
 	if err != nil {
 		l.Error("Failed to get task status", zap.Error(err))
 		return fmt.Errorf("failed to get task status: %w", err)
+	}*/
+
+	status, err := c.task.Status(c.ctx)
+	if err != nil {
+		if !errors.Is(err, errdefs.ErrNotFound){
+			l.Warn("Task status check failed", zap.Error(err))
+		}
 	}
 
 	if status.Status != containerd.Running {
@@ -375,21 +383,28 @@ func (c *Container) Stop(opts StopOptions) error {
 	return nil
 }
 
+// Improved Remove method with better error handling
 func (c *Container) Remove() error {
 	l := logger.Get()
 	l.Info("Removing container", zap.String("id", c.id))
 	var errs []error
+
 	if c.task != nil {
 		l.Info("Deleting task")
-		if _, err := c.task.Delete(c.ctx); err != nil {
-			l.Error("Failed to delete task", zap.Error(err))
-			errs = append(errs, fmt.Errorf("failed to delete task: %w", err))
+		// Check if task exists before trying to delete
+		if _, err := c.task.Status(c.ctx); err == nil {
+			if _, err := c.task.Delete(c.ctx); err != nil && !errors.Is(err, errdefs.ErrNotFound) {
+				l.Error("Failed to delete task", zap.Error(err))
+				errs = append(errs, fmt.Errorf("failed to delete task: %w", err))
+			}
+		} else if !errors.Is(err, errdefs.ErrNotFound) {
+			l.Warn("Task status check failed", zap.Error(err))
 		}
 	}
 
 	if c.container != nil {
 		l.Info("Deleting container")
-		if err := c.container.Delete(c.ctx, containerd.WithSnapshotCleanup); err != nil {
+		if err := c.container.Delete(c.ctx, containerd.WithSnapshotCleanup); err != nil && !errors.Is(err, errdefs.ErrNotFound) {
 			l.Error("Failed to delete container", zap.Error(err))
 			errs = append(errs, fmt.Errorf("failed to delete container: %w", err))
 		}
@@ -408,26 +423,59 @@ func (c *Container) Remove() error {
 	return nil
 }
 
+// Improved processLogs with better error handling and timing
 func (c *Container) processLogs(reader io.Reader, source string) {
+	l := logger.Get()
 	scanner := bufio.NewScanner(reader)
+
 	for scanner.Scan() {
-		// Will probably change later to define err and stdout
 		line := fmt.Sprintf("[%s] %s", source, scanner.Text())
+
+		// Store logs
 		c.logMu.Lock()
 		c.logs = append(c.logs, line)
 		c.logMu.Unlock()
 
+		// Call callbacks
 		c.callbackMu.Lock()
-		for _, cb := range c.callbacks {
-			cb(line)
-		}
+		callbacks := make([]LogCallback, len(c.callbacks))
+		copy(callbacks, c.callbacks)
 		c.callbackMu.Unlock()
+
+		for _, cb := range callbacks {
+			if cb != nil {
+				cb(line)
+			}
+		}
+
+		l.Debug("Processed log line", zap.String("source", source), zap.String("line", line))
 	}
 
 	if err := scanner.Err(); err != nil {
-		zap.L().Error("Error scanning logs",
-			zap.String("source", source),
-			zap.Error(err))
+		l.Error("Error scanning logs", zap.String("source", source), zap.Error(err))
+	}
+
+	l.Debug("Log processing completed", zap.String("source", source))
+}
+
+func (c *Container) WaitForLogs(timeout time.Duration) error {
+	if c.task == nil {
+		return fmt.Errorf("no task available")
+	}
+
+	// Wait for task to complete first
+	statusC, err := c.task.Wait(c.ctx)
+	if err != nil {
+		return fmt.Errorf("failed to wait for task: %w", err)
+	}
+
+	select {
+	case <-statusC:
+		// Task completed, give logs time to be processed
+		time.Sleep(100 * time.Millisecond)
+		return nil
+	case <-time.After(timeout):
+		return fmt.Errorf("timeout waiting for container to complete")
 	}
 }
 

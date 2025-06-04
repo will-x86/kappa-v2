@@ -19,6 +19,11 @@ var once sync.Once
 
 var logger *zap.Logger
 
+func ResetForTest() {
+	logger = nil
+	once = sync.Once{}
+}
+
 // Get initializes a zap.Logger instance if it has not been initialized
 // already and returns the same instance for subsequent calls.
 func Get() *zap.Logger {

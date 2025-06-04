@@ -94,9 +94,8 @@ func (lf *KappaFunction) Start(ctx context.Context) error {
 	l.Info("Starting kappa function",
 		zap.String("name", lf.Name),
 		zap.String("binary", lf.BinaryPath))
-
 	// Create temp directory for the binary
-	tmpPath, err := os.MkdirTemp("", fmt.Sprintf("kappa-kappa-%s-*", lf.Name))
+	tmpPath, err := os.MkdirTemp("", fmt.Sprintf("kappa-%s-*", lf.Name))
 	if err != nil {
 		return fmt.Errorf("failed to create temp directory: %w", err)
 	}
@@ -123,9 +122,13 @@ func (lf *KappaFunction) Start(ctx context.Context) error {
 	}, lf.Env...)
 
 	// Create container
+	name := fmt.Sprintf("kappa-%s-%s", lf.Name, uuid.New().String())
+	if len(name) > 76{
+		name = name[0:75]
+	}
 	container, err := cont.NewContainer(cont.ContainerConfig{
 		Image:     lf.Image,
-		Name:      fmt.Sprintf("kappa-%s-%s", lf.Name, uuid.New().String()),
+		Name:      name,
 		Command:   []string{"/app/main"},
 		Env:       env,
 		Namespace: "kappa",
