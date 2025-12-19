@@ -39,6 +39,7 @@ func setupContainerdTest(t *testing.T) context.Context {
 	ctx := namespaces.WithNamespace(context.Background(), testNamespace)
 	logger := zap.NewNop() // Use Nop logger for test setup clarity
 	logger.Info("Using test namespace", zap.String("namespace", testNamespace))
+
 	return ctx
 }
 

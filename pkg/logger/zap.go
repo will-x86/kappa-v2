@@ -20,7 +20,9 @@ var once sync.Once
 var logger *zap.Logger
 
 func ResetForTest() {
+
 	logger = nil
+	os.RemoveAll("logs")
 	once = sync.Once{}
 }
 

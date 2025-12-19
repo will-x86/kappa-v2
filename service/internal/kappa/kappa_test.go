@@ -3,6 +3,7 @@ package kappa
 import (
 	"context"
 	"fmt"
+	"kappa-v2/pkg/logger"
 	"net/http"
 	"os"
 	"os/exec"
@@ -77,7 +78,7 @@ func TestMain(m *testing.M) {
 	if globalTestHandlerBinaryPath != "" {
 		os.RemoveAll(filepath.Dir(globalTestHandlerBinaryPath))
 	}
-
+	logger.ResetForTest() // dels log dir
 	os.Exit(code)
 }
 
